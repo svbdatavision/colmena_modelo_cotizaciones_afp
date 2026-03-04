@@ -1,0 +1,85 @@
+stages:
+  - validate
+  - integration
+
+default:
+  image: python:3.12
+  before_script:
+    - pip install -r requirements.txt
+
+validate_syntax:
+  stage: validate
+  script:
+    - python -m compileall src notebooks
+    - python -c "import requests, pdfminer, selenium, pypasser, pyspark; print('imports_ok')"
+
+integration_e2e_manual:
+  stage: integration
+  when: manual
+  allow_failure: false
+  script:
+    - python - <<'PY'
+import csv
+import os
+import shutil
+import sys
+sys.path.append('src')
+
+from pyspark.sql import SparkSession
+from pipeline_config import PipelineConfig
+import download
+import parse
+import afp
+import compare
+import upload
+
+base_path = 'ci_runtime'
+if os.path.exists(base_path):
+    shutil.rmtree(base_path)
+os.makedirs(base_path, exist_ok=True)
+
+cfg = PipelineConfig(
+    storage_base_path=base_path,
+    target_table='default.afp_certificados_output_ci',
+    table_provider='parquet',
+)
+cfg.ensure_directories()
+
+with open(cfg.input_csv_path, 'w', encoding='utf-8') as f:
+    writer = csv.DictWriter(
+        f,
+        fieldnames=['doc_idn', 'link', 'periodo_produccion', 'fecha_ingreso'],
+        delimiter=';',
+        escapechar='\\',
+    )
+    writer.writeheader()
+    writer.writerow(
+        {
+            'doc_idn': '166088887',
+            'link': 'https://w3.provida.cl/validador/descarga.ashx?Id=245756274-188906699',
+            'periodo_produccion': '2024-12-01',
+            'fecha_ingreso': '2026-03-04',
+        }
+    )
+
+spark = (
+    SparkSession.builder
+    .master('local[2]')
+    .appName('ci_afp_e2e')
+    .config('spark.sql.warehouse.dir', f'{base_path}/warehouse')
+    .getOrCreate()
+)
+
+download.run(cfg)
+parse.run(cfg)
+afp.run(cfg)
+compare.run(cfg)
+upload.run(cfg, spark=spark)
+
+count = spark.sql("select count(*) as c from default.afp_certificados_output_ci").collect()[0]["c"]
+if count < 1:
+    raise SystemExit('integration test failed: no rows persisted')
+
+spark.stop()
+print('integration_ok')
+PY
