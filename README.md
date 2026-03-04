@@ -97,6 +97,46 @@ Para Selenium en cluster:
 - usar init script `scripts/databricks_init_selenium.sh`
 - asegurar `AFP_CHROMEDRIVER_PATH=/databricks/driver/chromedriver`
 
+## 5.1) Validacion E2E en Databricks (antes de env setup)
+
+Notebook de validacion:
+
+- `/notebooks/modelo_cotizaciones_afp_validate.py`
+
+Este notebook ejecuta el pipeline y devuelve un JSON con checks:
+- existencia de storage base
+- existencia de chromedriver
+- existencia y tamano de PDFs original/validado
+- primera fila de `output/certificados.csv`
+- `target_table_count`
+- `res_afp`, `es_dif`, `afp`, `rut`, `codver`
+
+### Modo recomendado de prueba inicial (sin extract)
+
+Configurar widgets:
+- `run_extract = false`
+- `seed_doc_idn = 166088887`
+- `seed_link = https://w3.provida.cl/validador/descarga.ashx?Id=245756274-188906699`
+- `seed_periodo_produccion = 2024-12-01`
+- `seed_fecha_ingreso = 2026-03-04`
+- `target_table = <catalog>.<schema>.afp_certificados_output_tmp`
+
+Resultado esperado:
+- `res_afp = ok`
+- `es_dif = False`
+- `original_pdf_exists = true`
+- `validated_pdf_exists = true`
+- `target_table_count >= 1`
+
+### Modo productivo (con extract)
+
+Configurar:
+- `run_extract = true`
+- `source_table` y `target_table` reales en UC/Hive metastore
+
+Nota: la consulta de extract mantiene el anti-join contra `target_table`.
+Por eso `target_table` debe existir previamente en el catalogo.
+
 ## 6) Prueba E2E ejecutada (real)
 
 Se ejecuto prueba real completa del flujo sobre un caso ProVida:
