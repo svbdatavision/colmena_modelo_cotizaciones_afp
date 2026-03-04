@@ -142,6 +142,9 @@ Configurar:
 Nota: la consulta de extract mantiene el anti-join contra `target_table`.
 Por eso `target_table` debe existir previamente en el catalogo.
 
+Guia corta adicional:
+- `scripts/VALIDACION_DATABRICKS.md`
+
 ## 6) Prueba E2E ejecutada (real)
 
 Se ejecuto prueba real completa del flujo sobre un caso ProVida:
