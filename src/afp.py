@@ -17,6 +17,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
+from pdf_storage import build_pdf_path, ensure_pdf_parent
 
 
 def create_driver(driver_path: str, download_path: str, headless: bool = True):
@@ -162,11 +163,15 @@ def download_pdf(
     codver: str = "",
     afp: str = "",
     driver=None,
-    pdfs_dir: str = "",
+    output_pdf_path: str = "",
     download_temp: str = "",
     timeout_seconds: int = 30,
     retries: int = 2,
 ):
+    if not output_pdf_path:
+        raise Exception("output_pdf_path is required")
+    ensure_pdf_parent(output_pdf_path)
+
     if afp == "modelo":
         if driver is None:
             raise Exception("driver not initialized")
@@ -181,7 +186,7 @@ def download_pdf(
         url = driver.find_element(By.XPATH, '//*[@id="__layout"]/div/main/div/div/div/div[3]/div/div/a').get_attribute("href")
         req = _request_with_retry("GET", url, timeout_seconds=timeout_seconds, retries=retries)
         if req.status_code == 200:
-            with open(f"{pdfs_dir}/_{id}.pdf", "wb") as handler:
+            with open(output_pdf_path, "wb") as handler:
                 handler.write(req.content)
             return
         raise Exception("No result")
@@ -199,7 +204,7 @@ def download_pdf(
             sess.cookies.set(cookie["name"], cookie["value"])
         req = sess.get(config[afp].get("url_dwn", ""), timeout=timeout_seconds)
         if req.status_code == 200:
-            with open(f"{pdfs_dir}/_{id}.pdf", "wb") as handler:
+            with open(output_pdf_path, "wb") as handler:
                 handler.write(req.content)
             try:
                 os.remove(max(glob.glob(f"{download_temp}/*"), key=os.path.getctime))
@@ -228,7 +233,7 @@ def download_pdf(
                     retries=retries,
                 )
                 if req.status_code == 200:
-                    with open(f"{pdfs_dir}/_{id}.pdf", "wb") as handler:
+                    with open(output_pdf_path, "wb") as handler:
                         handler.write(req.content)
                     return
         raise Exception("No result")
@@ -245,7 +250,7 @@ def download_pdf(
         )
         if req.status_code == 200:
             if req.content:
-                with open(f"{pdfs_dir}/_{id}.pdf", "wb") as handler:
+                with open(output_pdf_path, "wb") as handler:
                     handler.write(req.content)
                 return
         raise Exception("No result")
@@ -263,7 +268,7 @@ def download_pdf(
         if req.status_code == 200:
             resp = req.json()
             if resp.get("codigo", "") == "0":
-                with open(f"{pdfs_dir}/_{id}.pdf", "wb") as handler:
+                with open(output_pdf_path, "wb") as handler:
                     handler.write(base64.b64decode(resp.get("data", {}).get("bytes", "").encode()))
                 return
         raise Exception("No result")
@@ -295,7 +300,7 @@ def download_pdf(
         btn = driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_btnDescargaPdf")
         driver.execute_script("arguments[0].click();", btn)
         time.sleep(3)
-        os.rename(max(glob.glob(f"{download_temp}/*"), key=os.path.getctime), f"{pdfs_dir}/_{id}.pdf")
+        os.rename(max(glob.glob(f"{download_temp}/*"), key=os.path.getctime), output_pdf_path)
         return
 
     if afp == "planvital":
@@ -322,7 +327,7 @@ def download_pdf(
         if req.status_code == 200:
             resp = req.json()
             if resp.get("valid", ""):
-                with open(f"{pdfs_dir}/_{id}.pdf", "wb") as handler:
+                with open(output_pdf_path, "wb") as handler:
                     handler.write(base64.b64decode(resp.get("data", {}).encode()))
                 return
         raise Exception("No result")
@@ -372,7 +377,11 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
                             codver=row["codver"],
                             afp=row["afp"],
                             driver=driver,
-                            pdfs_dir=config_runtime.pdfs_dir,
+                            output_pdf_path=build_pdf_path(
+                                config_runtime,
+                                row["doc_idn"],
+                                "validacion",
+                            ),
                             download_temp=config_runtime.temp_dir,
                             timeout_seconds=config_runtime.request_timeout_seconds,
                             retries=config_runtime.request_retries,
