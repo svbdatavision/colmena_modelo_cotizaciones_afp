@@ -7,6 +7,7 @@ from pyspark.sql import SparkSession
 
 from pipeline import run_pipeline
 from pipeline_config import PipelineConfig
+from pdf_storage import resolve_pdf_path
 
 
 def _write_seed_input(
@@ -89,8 +90,11 @@ def run_validation(
     results["checks"]["output_first_row"] = first_row
 
     doc_idn = first_row["doc_idn"] if first_row else seed_doc_idn
-    original_pdf = f"{config.pdfs_dir}/{doc_idn}.pdf"
-    validated_pdf = f"{config.pdfs_dir}/_{doc_idn}.pdf"
+    original_pdf = resolve_pdf_path(config, doc_idn, "original")
+    validated_pdf = resolve_pdf_path(config, doc_idn, "validacion")
+
+    results["checks"]["original_pdf_path"] = original_pdf
+    results["checks"]["validated_pdf_path"] = validated_pdf
 
     results["checks"]["original_pdf_exists"] = os.path.exists(original_pdf)
     results["checks"]["validated_pdf_exists"] = os.path.exists(validated_pdf)

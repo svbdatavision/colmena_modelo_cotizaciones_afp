@@ -6,6 +6,7 @@ import requests
 
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
+from pdf_storage import build_pdf_path, ensure_pdf_parent
 
 
 def _download_content(
@@ -46,7 +47,8 @@ def run(config: Optional[PipelineConfig] = None) -> str:
                         timeout_seconds=config.request_timeout_seconds,
                         retries=config.request_retries,
                     )
-                    pdf_path = f"{config.pdfs_dir}/{doc_idn}.pdf"
+                    pdf_path = build_pdf_path(config, doc_idn, "original")
+                    ensure_pdf_parent(pdf_path)
                     with open(pdf_path, "wb") as output_pdf:
                         output_pdf.write(content)
                 except Exception as err:

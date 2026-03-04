@@ -21,6 +21,13 @@ def normalize_local_path(path: str) -> str:
     return path
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y"}
+
+
 @dataclass
 class PipelineConfig:
     storage_base_path: str = field(default_factory=_default_storage_base_path)
@@ -31,6 +38,13 @@ class PipelineConfig:
         default_factory=lambda: os.getenv("AFP_TARGET_TABLE", "opx.p_ddv_opx.afp_certificados_output")
     )
     table_provider: str = field(default_factory=lambda: os.getenv("AFP_TABLE_PROVIDER", "delta"))
+    use_partitioned_pdf_storage: bool = field(
+        default_factory=lambda: _env_bool("AFP_USE_PARTITIONED_PDF_STORAGE", True)
+    )
+    bronze_pdf_prefix: str = field(
+        default_factory=lambda: os.getenv("AFP_BRONZE_PDF_PREFIX", "bronze/afp_processing")
+    )
+    processing_date: str = field(default_factory=lambda: os.getenv("AFP_PROCESSING_DATE", ""))
     extract_days: int = 30
     extract_limit: int = 240
     request_timeout_seconds: int = 30
@@ -87,5 +101,6 @@ class PipelineConfig:
             self.pdfs_dir,
             self.temp_dir,
             self.logs_dir,
+            os.path.join(self.base_path, self.bronze_pdf_prefix),
         ]:
             os.makedirs(path, exist_ok=True)

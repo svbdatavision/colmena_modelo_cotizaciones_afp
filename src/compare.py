@@ -7,6 +7,7 @@ from pdfminer.high_level import extract_text
 
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
+from pdf_storage import resolve_pdf_path
 
 
 def diff(x, y):
@@ -53,13 +54,15 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
             out = row
             if row["res_afp"] == "ok":
                 try:
+                    afp_pdf_path = resolve_pdf_path(config_runtime, row["doc_idn"], "validacion")
+                    ori_pdf_path = resolve_pdf_path(config_runtime, row["doc_idn"], "original")
                     txt_afp = (
-                        unicodedata.normalize("NFKD", extract_text(f"{config_runtime.pdfs_dir}/_{row['doc_idn']}.pdf"))
+                        unicodedata.normalize("NFKD", extract_text(afp_pdf_path))
                         .encode("ascii", "ignore")
                         .decode("utf-8")
                     )
                     txt_ori = (
-                        unicodedata.normalize("NFKD", extract_text(f"{config_runtime.pdfs_dir}/{row['doc_idn']}.pdf"))
+                        unicodedata.normalize("NFKD", extract_text(ori_pdf_path))
                         .encode("ascii", "ignore")
                         .decode("utf-8")
                     )

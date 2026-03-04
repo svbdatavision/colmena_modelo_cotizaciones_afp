@@ -9,6 +9,7 @@ from pdfminer.pdfparser import PDFParser
 
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
+from pdf_storage import resolve_pdf_path
 
 
 def extract_meta(input_value):
@@ -113,7 +114,7 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
         for row in reader:
             file_name = row["doc_idn"]
             out = row
-            file_path = f"{config_runtime.pdfs_dir}/{file_name}.pdf"
+            file_path = resolve_pdf_path(config_runtime, file_name, "original")
 
             try:
                 with open(file_path, "rb") as fp:

@@ -46,6 +46,11 @@ Motivo:
 
 > `pipeline_config.py` usa por defecto `/Volumes/main/default/modelo_cotizaciones_afp` cuando detecta Databricks runtime.
 
+Layout de PDFs (creado automaticamente por codigo):
+
+- `bronze/afp_processing/year=YYYY/month=MM/day=DD/tipo_documento=original/<doc_idn>.pdf`
+- `bronze/afp_processing/year=YYYY/month=MM/day=DD/tipo_documento=validacion/<doc_idn>.pdf`
+
 ## 3) Manejo de secretos
 
 No hay credenciales hardcodeadas.
@@ -174,6 +179,9 @@ Se incluye `/.gitlab-ci.yml` con:
 - `AFP_TARGET_TABLE`
 - `AFP_CHROMEDRIVER_PATH`
 - `AFP_TABLE_PROVIDER` (`delta` en Databricks, `parquet` para local)
+- `AFP_USE_PARTITIONED_PDF_STORAGE` (`true` por defecto)
+- `AFP_BRONZE_PDF_PREFIX` (`bronze/afp_processing` por defecto)
+- `AFP_PROCESSING_DATE` (`YYYY-MM-DD`, opcional para backfill)
 
 ## 9) Checklist de migracion
 
