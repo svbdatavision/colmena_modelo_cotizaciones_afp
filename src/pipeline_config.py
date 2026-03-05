@@ -7,11 +7,9 @@ import os
 def _default_storage_base_path() -> str:
     databricks_runtime = os.getenv("DATABRICKS_RUNTIME_VERSION")
     if databricks_runtime:
-        # Production default: Unity Catalog Volume backed by ADLS Gen2.
-        return os.getenv(
-            "AFP_STORAGE_BASE_PATH",
-            "/Volumes/main/default/modelo_cotizaciones_afp",
-        )
+        # Safe default for execution. In production override AFP_STORAGE_BASE_PATH
+        # with an existing UC Volume path.
+        return os.getenv("AFP_STORAGE_BASE_PATH", "/local_disk0/tmp/modelo_cotizaciones_afp")
     return os.getenv("AFP_STORAGE_BASE_PATH", "/workspace")
 
 
@@ -95,6 +93,12 @@ class PipelineConfig:
         return os.path.join(self.logs_dir, "errors.log")
 
     def ensure_directories(self) -> None:
+        if self.base_path.startswith("/Volumes/") and not os.path.exists(self.base_path):
+            raise FileNotFoundError(
+                f"storage_base_path does not exist: {self.base_path}. "
+                "Use an existing UC Volume path (e.g. /Volumes/<catalog>/<schema>/<volume>)."
+            )
+
         for path in [
             self.input_dir,
             self.output_dir,

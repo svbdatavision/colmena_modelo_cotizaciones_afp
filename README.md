@@ -51,6 +51,10 @@ Layout de PDFs (creado automaticamente por codigo):
 - `bronze/afp_processing/year=YYYY/month=MM/day=DD/tipo_documento=original/<doc_idn>.pdf`
 - `bronze/afp_processing/year=YYYY/month=MM/day=DD/tipo_documento=validacion/<doc_idn>.pdf`
 
+Importante:
+- Si usas `storage_base_path` en `/Volumes/...`, debe apuntar a un **Volume existente**.
+- El pipeline crea subdirectorios internos (`input/output/tmp/logs/bronze/...`), pero no crea el UC Volume.
+
 ## 3) Manejo de secretos
 
 No hay credenciales hardcodeadas.
