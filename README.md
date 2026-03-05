@@ -34,17 +34,18 @@ Migracion de `modelo_cotizaciones_afp` desde GCP + Snowflake a Databricks Azure,
 
 ## 2) Storage recomendado (produccion)
 
-**Opcion implementada y recomendada:** ADLS Gen2 via **Unity Catalog Volume** (externo).
+El pipeline **no requiere** Unity Catalog Volume para funcionar.
 
-- Ruta recomendada: `/Volumes/<catalog>/<schema>/<volume>/modelo_cotizaciones_afp`
-- Variable runtime: `AFP_STORAGE_BASE_PATH`
+Opciones validas:
+- `dbfs:/...` (recomendado cuando no hay Volume disponible)
+- ruta de mount externo ya existente
+- `/Volumes/...` solo si el Volume ya existe
 
-Motivo:
-- Governance y permisos UC
-- No depende de DBFS root
-- Persistencia compartida entre jobs/notebooks
+Variable runtime:
+- `AFP_STORAGE_BASE_PATH`
 
-> `pipeline_config.py` usa por defecto `/Volumes/main/default/modelo_cotizaciones_afp` cuando detecta Databricks runtime.
+Default actual en Databricks:
+- `dbfs:/tmp/modelo_cotizaciones_afp`
 
 Layout de PDFs (creado automaticamente por codigo):
 
@@ -53,7 +54,7 @@ Layout de PDFs (creado automaticamente por codigo):
 
 Importante:
 - Si usas `storage_base_path` en `/Volumes/...`, debe apuntar a un **Volume existente**.
-- El pipeline crea subdirectorios internos (`input/output/tmp/logs/bronze/...`), pero no crea el UC Volume.
+- El pipeline crea subdirectorios internos (`input/output/tmp/logs/bronze/...`).
 
 ## 3) Manejo de secretos
 

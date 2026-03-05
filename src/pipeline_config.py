@@ -7,9 +7,8 @@ import os
 def _default_storage_base_path() -> str:
     databricks_runtime = os.getenv("DATABRICKS_RUNTIME_VERSION")
     if databricks_runtime:
-        # Safe default for execution. In production override AFP_STORAGE_BASE_PATH
-        # with an existing UC Volume path.
-        return os.getenv("AFP_STORAGE_BASE_PATH", "/local_disk0/tmp/modelo_cotizaciones_afp")
+        # Safe default for execution without UC Volume dependency.
+        return os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp")
     return os.getenv("AFP_STORAGE_BASE_PATH", "/workspace")
 
 

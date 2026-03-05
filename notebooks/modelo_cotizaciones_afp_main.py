@@ -16,7 +16,7 @@ from pipeline_config import PipelineConfig
 
 # COMMAND ----------
 try:
-    dbutils.widgets.text("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "/local_disk0/tmp/modelo_cotizaciones_afp"))
+    dbutils.widgets.text("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp"))
     dbutils.widgets.text("source_table", os.getenv("AFP_SOURCE_TABLE", "opx.p_ddv_opx.afp_certificados"))
     dbutils.widgets.text("target_table", os.getenv("AFP_TARGET_TABLE", "opx.p_ddv_opx.afp_certificados_output"))
     dbutils.widgets.text("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver"))
@@ -34,7 +34,7 @@ def _widget(name: str, default: str) -> str:
 
 run_extract = _widget("run_extract", "true").lower() == "true"
 config = PipelineConfig(
-    storage_base_path=_widget("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "/local_disk0/tmp/modelo_cotizaciones_afp")),
+    storage_base_path=_widget("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp")),
     source_table=_widget("source_table", "opx.p_ddv_opx.afp_certificados"),
     target_table=_widget("target_table", "opx.p_ddv_opx.afp_certificados_output"),
     chromedriver_path=_widget("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver")),

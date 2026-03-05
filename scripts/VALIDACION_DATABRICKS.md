@@ -30,7 +30,7 @@ Widgets recomendados:
 - `seed_fecha_ingreso = 2026-03-04`
 - `table_provider = delta`
 - `target_table = <catalog>.<schema>.afp_certificados_output_tmp`
-- `storage_base_path = /local_disk0/tmp/modelo_cotizaciones_afp` (para prueba rapida)
+- `storage_base_path = dbfs:/tmp/modelo_cotizaciones_afp` (para prueba rapida)
   o `/Volumes/<catalog>/<schema>/<volume>` (si el Volume ya existe)
 
 ## 3) Criterios de aprobacion (OK)
