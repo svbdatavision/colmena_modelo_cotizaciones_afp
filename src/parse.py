@@ -1,3 +1,4 @@
+import os
 import csv
 import re
 import unicodedata
@@ -109,32 +110,47 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
     logger = get_logger(__name__, config_runtime.log_file_path, with_doc_id=True)
 
     output = []
+    with_pdf = 0
+    missing_pdf = 0
     with open(config_runtime.input_csv_path, "r", encoding="utf-8") as handler:
         reader = csv.DictReader(handler, delimiter=";", escapechar="\\")
         for row in reader:
             file_name = row["doc_idn"]
             out = row
             file_path = resolve_pdf_path(config_runtime, file_name, "original")
+            file_exists = os.path.exists(file_path)
 
-            try:
-                with open(file_path, "rb") as fp:
-                    parser = PDFParser(fp)
-                    doc = PDFDocument(parser)
-                    meta = doc.info[0]
-                    out["metadata_creator"] = extract_meta(meta.get("Creator", ""))
-                    out["metadata_producer"] = extract_meta(meta.get("Producer", ""))
-                    out["metadata_creadate"] = extract_meta(meta.get("CreationDate", ""))
-                    out["metadata_moddate"] = extract_meta(meta.get("ModDate", ""))
-            except Exception as err:
-                log_exception(logger, err, doc_idn=file_name)
-
-            try:
-                txt = (
-                    unicodedata.normalize("NFKD", extract_text(file_path))
-                    .encode("ascii", "ignore")
-                    .decode("utf-8")
+            if file_exists:
+                with_pdf += 1
+                try:
+                    with open(file_path, "rb") as fp:
+                        parser = PDFParser(fp)
+                        doc = PDFDocument(parser)
+                        meta = doc.info[0]
+                        out["metadata_creator"] = extract_meta(meta.get("Creator", ""))
+                        out["metadata_producer"] = extract_meta(meta.get("Producer", ""))
+                        out["metadata_creadate"] = extract_meta(meta.get("CreationDate", ""))
+                        out["metadata_moddate"] = extract_meta(meta.get("ModDate", ""))
+                except Exception as err:
+                    log_exception(logger, err, doc_idn=file_name)
+            else:
+                missing_pdf += 1
+                log_exception(
+                    logger,
+                    FileNotFoundError(f"original pdf not found: {file_path}"),
+                    doc_idn=file_name,
                 )
-            except Exception:
+
+            if file_exists:
+                try:
+                    txt = (
+                        unicodedata.normalize("NFKD", extract_text(file_path))
+                        .encode("ascii", "ignore")
+                        .decode("utf-8")
+                    )
+                except Exception:
+                    txt = ""
+            else:
                 txt = ""
 
             try:
@@ -188,7 +204,7 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
         writer.writeheader()
         writer.writerows(output)
 
-    print("3_parse: OK")
+    print(f"3_parse: OK (with_pdf={with_pdf}, missing_pdf={missing_pdf})")
     return config_runtime.output_csv_path
 
 

@@ -33,6 +33,8 @@ def run(config: Optional[PipelineConfig] = None) -> str:
     config = config or PipelineConfig()
     config.ensure_directories()
     logger = get_logger(__name__, config.log_file_path, with_doc_id=True)
+    downloaded = 0
+    failed = 0
 
     with open(config.input_csv_path, "r", encoding="utf-8") as handler:
         reader = csv.DictReader(handler, delimiter=";", escapechar="\\")
@@ -51,11 +53,13 @@ def run(config: Optional[PipelineConfig] = None) -> str:
                     ensure_pdf_parent(pdf_path)
                     with open(pdf_path, "wb") as output_pdf:
                         output_pdf.write(content)
+                    downloaded += 1
                 except Exception as err:
                     log_exception(logger, err, doc_idn=doc_idn)
+                    failed += 1
                 time.sleep(config.sleep_seconds_between_downloads)
 
-    print("2_download: OK")
+    print(f"2_download: OK (downloaded={downloaded}, failed={failed})")
     return config.pdfs_dir
 
 

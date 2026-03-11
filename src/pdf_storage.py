@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import glob
 import os
 from typing import Literal
 
@@ -46,6 +47,19 @@ def resolve_pdf_path(config: PipelineConfig, doc_idn: str, doc_type: DocType) ->
     preferred = build_pdf_path(config, doc_idn, doc_type)
     if os.path.exists(preferred):
         return preferred
+
+    partitioned_pattern = os.path.join(
+        config.base_path,
+        config.bronze_pdf_prefix,
+        "year=*",
+        "month=*",
+        "day=*",
+        f"tipo_documento={doc_type}",
+        f"{doc_idn}.pdf",
+    )
+    matches = glob.glob(partitioned_pattern)
+    if matches:
+        return max(matches, key=os.path.getmtime)
 
     legacy = _legacy_pdf_path(config, doc_idn, doc_type)
     if os.path.exists(legacy):

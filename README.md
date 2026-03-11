@@ -138,6 +138,11 @@ Resultado esperado:
 - `validated_pdf_exists = true`
 - `target_table_count >= 1`
 
+Notas de ejecucion:
+- `2_download` ahora reporta `downloaded` y `failed`.
+- `3_parse` ahora reporta `with_pdf` y `missing_pdf`.
+- Si `failed/missing_pdf` > 0, normalmente es por links no descargables en ese entorno/red.
+
 ### Modo productivo (con extract)
 
 Configurar:
