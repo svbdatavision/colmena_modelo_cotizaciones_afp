@@ -20,6 +20,75 @@ def extract_meta(input_value):
         return ""
 
 
+def _normalize_token(value: str) -> str:
+    return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("utf-8").lower().strip()
+
+
+def detect_afp(txt: str, metadata_producer: str) -> str:
+    normalized_txt = _normalize_token(txt)
+    normalized_producer = _normalize_token(metadata_producer or "")
+
+    try:
+        afp_match = re.search("A\\.?F\\.?P\\.?\\s+([A-Za-z]+)", normalized_txt, re.IGNORECASE)
+        if afp_match:
+            token = _normalize_token(afp_match[1])
+            alias_map = {
+                "modelo": "modelo",
+                "habitat": "habitat",
+                "cuprum": "cuprum",
+                "capital": "capital",
+                "provida": "provida",
+                "planvital": "planvital",
+                "uno": "uno",
+            }
+            if token in alias_map:
+                return alias_map[token]
+    except Exception:
+        pass
+
+    keyword_hints = [
+        ("modelo", ["afp modelo", "afpmodelo"]),
+        ("habitat", ["afp habitat", "afphabitat"]),
+        ("cuprum", ["afp cuprum", "cuprum.cl"]),
+        ("capital", ["afp capital", "afpcapital"]),
+        ("provida", ["afp provida", "provida.cl"]),
+        ("planvital", ["afp planvital", "planvital.cl"]),
+        ("uno", ["afp uno", "uno.cl"]),
+    ]
+    for afp_name, hints in keyword_hints:
+        if any(hint in normalized_txt for hint in hints):
+            return afp_name
+
+    if re.search("iText1\\.3\\.1", normalized_producer, re.IGNORECASE):
+        return "habitat"
+    if re.search("Telerik Reporting", normalized_producer, re.IGNORECASE):
+        return "planvital"
+    if re.search("PDFsharp", normalized_producer, re.IGNORECASE):
+        return "capital"
+    if re.search("\\biText\\b", normalized_producer, re.IGNORECASE):
+        return "provida"
+
+    for afp_name, afp_cfg in config.items():
+        try:
+            if re.search(afp_cfg["codver"], txt, re.IGNORECASE):
+                return afp_name
+        except Exception:
+            pass
+
+    return ""
+
+
+def detect_afp_by_codver(txt: str):
+    for afp_name, afp_cfg in config.items():
+        try:
+            codver_match = re.search(afp_cfg["codver"], txt, re.IGNORECASE)
+            if codver_match:
+                return afp_name, codver_match[1]
+        except Exception:
+            pass
+    return "", ""
+
+
 config = {
     "modelo": {
         "nombre": "A.F.P. Modelo S.A.",
@@ -153,14 +222,10 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
             else:
                 txt = ""
 
-            try:
-                afp = re.search("\\n+A\\.?F\\.?P\\.? +(\\w+) ?(S\\.A\\.)?", txt, re.IGNORECASE)
-                if afp:
-                    out["afp"] = afp[1].lower()
-                else:
-                    out["afp"] = "habitat" if re.search("afphabitat\\.cl", txt, re.IGNORECASE) else ""
-            except Exception:
-                pass
+            out["afp"] = detect_afp(txt=txt, metadata_producer=out.get("metadata_producer", ""))
+            codver_detected_afp, codver_detected = detect_afp_by_codver(txt)
+            if not out["afp"] and codver_detected_afp:
+                out["afp"] = codver_detected_afp
 
             try:
                 out["es_metadata"] = (
@@ -189,7 +254,8 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
             try:
                 out["codver"] = re.search(config[out["afp"]]["codver"], txt, re.IGNORECASE)[1]
             except Exception:
-                pass
+                if codver_detected:
+                    out["codver"] = codver_detected
 
             output.append(out)
 
