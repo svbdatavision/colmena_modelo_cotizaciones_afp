@@ -143,6 +143,20 @@ Notas de ejecucion:
 - `3_parse` ahora reporta `with_pdf` y `missing_pdf`.
 - Si `failed/missing_pdf` > 0, normalmente es por links no descargables en ese entorno/red.
 
+### Modo recomendado diario (desde tabla, sin seeds)
+
+Configurar widgets:
+- `run_extract = true`
+- `source_table = opx.p_ddv_opx.afp_certificados`
+- `target_table = opx.p_ddv_opx.afp_certificados_output`
+- `extract_days = 0` (solo hoy)
+- `extract_limit = 240`
+
+Checks esperados en salida:
+- `1_extract: OK (rows=..., extract_days=0, limit=240)`
+- `2_download: OK (downloaded=..., failed=...)`
+- `3_parse: OK (with_pdf=..., missing_pdf=...)`
+
 ### Modo productivo (con extract)
 
 Configurar:

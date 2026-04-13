@@ -43,7 +43,7 @@ def run(config: Optional[PipelineConfig] = None, spark: Optional[SparkSession] =
         with open(config.input_csv_path, "w", encoding="utf-8") as handler:
             handler.write(HEADERS)
             handler.writelines(out)
-        print("1_extract: OK")
+        print(f"1_extract: OK (rows={len(rows)}, extract_days={config.extract_days}, limit={config.extract_limit})")
         return config.input_csv_path
     except Exception as err:
         log_exception(logger, err)

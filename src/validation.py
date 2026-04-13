@@ -45,6 +45,27 @@ def _read_output_first_row(output_csv_path: str) -> Optional[Dict[str, str]]:
     return None
 
 
+def _count_csv_rows(path: str) -> int:
+    if not os.path.exists(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as handler:
+        reader = csv.DictReader(handler, delimiter=";", escapechar="\\", quotechar='"')
+        return sum(1 for _ in reader)
+
+
+def _count_source_candidates(config: PipelineConfig, spark: SparkSession) -> Optional[int]:
+    try:
+        query = f"""
+        SELECT COUNT(*) AS c
+        FROM {config.source_table}
+        WHERE CAST(FECHA_INGRESO AS DATE) >= date_sub(current_date(), {config.extract_days})
+          AND DOC_IDN NOT IN (SELECT DOC_IDN FROM {config.target_table})
+        """
+        return spark.sql(query).collect()[0]["c"]
+    except Exception:
+        return None
+
+
 def run_validation(
     config: PipelineConfig,
     spark: SparkSession,
@@ -67,6 +88,9 @@ def run_validation(
 
     results["checks"]["storage_base_exists"] = os.path.isdir(config.base_path)
     results["checks"]["chromedriver_exists"] = os.path.exists(config.chromedriver_path)
+    results["checks"]["source_candidates_count"] = (
+        _count_source_candidates(config, spark) if run_extract else None
+    )
 
     if not run_extract:
         _write_seed_input(
@@ -86,6 +110,8 @@ def run_validation(
     run_pipeline(config=config, spark=spark, run_extract=run_extract)
 
     first_row = _read_output_first_row(config.output_csv_path)
+    results["checks"]["input_csv_rows"] = _count_csv_rows(config.input_csv_path)
+    results["checks"]["output_csv_rows"] = _count_csv_rows(config.output_csv_path)
     results["checks"]["output_csv_exists"] = os.path.exists(config.output_csv_path)
     results["checks"]["output_first_row"] = first_row
 

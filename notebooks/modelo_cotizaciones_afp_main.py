@@ -19,6 +19,8 @@ try:
     dbutils.widgets.text("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp"))
     dbutils.widgets.text("source_table", os.getenv("AFP_SOURCE_TABLE", "opx.p_ddv_opx.afp_certificados"))
     dbutils.widgets.text("target_table", os.getenv("AFP_TARGET_TABLE", "opx.p_ddv_opx.afp_certificados_output"))
+    dbutils.widgets.text("extract_days", os.getenv("AFP_EXTRACT_DAYS", "30"))
+    dbutils.widgets.text("extract_limit", os.getenv("AFP_EXTRACT_LIMIT", "240"))
     dbutils.widgets.text("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver"))
     dbutils.widgets.dropdown("run_extract", "true", ["true", "false"])
 except Exception:
@@ -37,6 +39,8 @@ config = PipelineConfig(
     storage_base_path=_widget("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp")),
     source_table=_widget("source_table", "opx.p_ddv_opx.afp_certificados"),
     target_table=_widget("target_table", "opx.p_ddv_opx.afp_certificados_output"),
+    extract_days=int(_widget("extract_days", os.getenv("AFP_EXTRACT_DAYS", "30"))),
+    extract_limit=int(_widget("extract_limit", os.getenv("AFP_EXTRACT_LIMIT", "240"))),
     chromedriver_path=_widget("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver")),
 )
 

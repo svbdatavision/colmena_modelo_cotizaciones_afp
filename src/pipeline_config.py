@@ -42,8 +42,8 @@ class PipelineConfig:
         default_factory=lambda: os.getenv("AFP_BRONZE_PDF_PREFIX", "bronze/afp_processing")
     )
     processing_date: str = field(default_factory=lambda: os.getenv("AFP_PROCESSING_DATE", ""))
-    extract_days: int = 30
-    extract_limit: int = 240
+    extract_days: int = field(default_factory=lambda: int(os.getenv("AFP_EXTRACT_DAYS", "30")))
+    extract_limit: int = field(default_factory=lambda: int(os.getenv("AFP_EXTRACT_LIMIT", "240")))
     request_timeout_seconds: int = 30
     request_retries: int = 2
     sleep_seconds_between_downloads: float = 1.0

@@ -19,9 +19,11 @@ try:
     dbutils.widgets.text("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp"))
     dbutils.widgets.text("source_table", os.getenv("AFP_SOURCE_TABLE", "opx.p_ddv_opx.afp_certificados"))
     dbutils.widgets.text("target_table", os.getenv("AFP_TARGET_TABLE", "opx.p_ddv_opx.afp_certificados_output"))
+    dbutils.widgets.text("extract_days", os.getenv("AFP_EXTRACT_DAYS", "0"))
+    dbutils.widgets.text("extract_limit", os.getenv("AFP_EXTRACT_LIMIT", "240"))
     dbutils.widgets.text("table_provider", os.getenv("AFP_TABLE_PROVIDER", "delta"))
     dbutils.widgets.text("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver"))
-    dbutils.widgets.dropdown("run_extract", "false", ["false", "true"])
+    dbutils.widgets.dropdown("run_extract", "true", ["true", "false"])
     dbutils.widgets.text("seed_doc_idn", "166088887")
     dbutils.widgets.text("seed_link", "https://w3.provida.cl/validador/descarga.ashx?Id=245756274-188906699")
     dbutils.widgets.text("seed_periodo_produccion", "2024-12-01")
@@ -41,6 +43,8 @@ config = PipelineConfig(
     storage_base_path=_widget("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp")),
     source_table=_widget("source_table", "opx.p_ddv_opx.afp_certificados"),
     target_table=_widget("target_table", "opx.p_ddv_opx.afp_certificados_output"),
+    extract_days=int(_widget("extract_days", os.getenv("AFP_EXTRACT_DAYS", "0"))),
+    extract_limit=int(_widget("extract_limit", os.getenv("AFP_EXTRACT_LIMIT", "240"))),
     table_provider=_widget("table_provider", os.getenv("AFP_TABLE_PROVIDER", "delta")),
     chromedriver_path=_widget("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver")),
 )
@@ -48,7 +52,7 @@ config = PipelineConfig(
 results = run_validation(
     config=config,
     spark=spark,
-    run_extract=_widget("run_extract", "false").lower() == "true",
+    run_extract=_widget("run_extract", "true").lower() == "true",
     seed_doc_idn=_widget("seed_doc_idn", "166088887"),
     seed_link=_widget("seed_link", "https://w3.provida.cl/validador/descarga.ashx?Id=245756274-188906699"),
     seed_periodo_produccion=_widget("seed_periodo_produccion", "2024-12-01"),
