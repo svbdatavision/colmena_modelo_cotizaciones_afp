@@ -1,4 +1,7 @@
 # Databricks notebook source
+# MAGIC %pip install -r "/Workspace/Isapre Colmena TI/Colmena Models/modelo-cotizaciones/requirements.txt"
+# MAGIC dbutils.library.restartPython()
+
 # COMMAND ----------
 import csv
 import json
@@ -6,12 +9,18 @@ import os
 import sys
 
 # COMMAND ----------
-repo_root = os.getcwd()
-src_path = os.path.join(repo_root, "src")
+try:
+    nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    nb_dir = "/Workspace" + os.path.dirname(nb_path)
+except Exception:
+    nb_dir = os.getcwd()
+
+src_path = os.path.join(nb_dir, "src")
 if not os.path.isdir(src_path):
-    src_path = os.path.abspath(os.path.join(repo_root, "..", "src"))
+    src_path = os.path.join(os.path.dirname(nb_dir), "src")
+
 if src_path not in sys.path:
-    sys.path.append(src_path)
+    sys.path.insert(0, src_path)
 
 from pipeline import run_pipeline
 from pipeline_config import PipelineConfig
@@ -64,6 +73,8 @@ def _sql_quote(value: str) -> str:
 
 
 run_extract = _widget("run_extract", "true").lower() == "true"
+from datetime import date
+
 config = PipelineConfig(
     storage_base_path=_widget("storage_base_path", os.getenv("AFP_STORAGE_BASE_PATH", "dbfs:/tmp/modelo_cotizaciones_afp")),
     source_table=_widget("source_table", "opx.p_ddv_opx.afp_certificados"),
@@ -71,6 +82,7 @@ config = PipelineConfig(
     extract_days=int(_widget("extract_days", os.getenv("AFP_EXTRACT_DAYS", "0"))),
     extract_limit=int(_widget("extract_limit", os.getenv("AFP_EXTRACT_LIMIT", "240"))),
     chromedriver_path=_widget("chromedriver_path", os.getenv("AFP_CHROMEDRIVER_PATH", "/databricks/driver/chromedriver")),
+    processing_date=date.today().strftime("%Y-%m-%d"),
 )
 
 summary = {
