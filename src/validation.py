@@ -71,7 +71,7 @@ def run_validation(
     spark: SparkSession,
     run_extract: bool = False,
     seed_doc_idn: str = "166088887",
-    seed_link: str = "https://w3.provida.cl/validador/descarga.ashx?Id=245756274-188906699",
+    seed_link: str = "http://10.0.15.58:8080/notifEnvioMailRest/public/documento/6512403",
     seed_periodo_produccion: str = "2024-12-01",
     seed_fecha_ingreso: str = "2026-03-04",
 ) -> Dict[str, Any]:

@@ -5,6 +5,7 @@ from pyspark.sql import SparkSession
 
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
+from source_link import rewrite_source_link
 
 
 HEADERS = "doc_idn;link;periodo_produccion;fecha_ingreso\n"
@@ -38,6 +39,8 @@ def run(config: Optional[PipelineConfig] = None, spark: Optional[SparkSession] =
         out = []
         for row in rows:
             values = [_to_csv_value(res) for res in row]
+            if len(values) > 1:
+                values[1] = rewrite_source_link(values[1])
             out.append(";".join(values) + "\n")
 
         with open(config.input_csv_path, "w", encoding="utf-8") as handler:

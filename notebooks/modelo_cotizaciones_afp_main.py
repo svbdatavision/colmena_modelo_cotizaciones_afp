@@ -24,6 +24,7 @@ if src_path not in sys.path:
 
 from pipeline import run_pipeline
 from pipeline_config import PipelineConfig
+from source_link import SOURCE_DOC_BASE_URL
 
 # COMMAND ----------
 try:
@@ -92,6 +93,7 @@ summary = {
     "target_table": config.target_table,
     "extract_days": config.extract_days,
     "extract_limit": config.extract_limit,
+    "source_doc_base_url": SOURCE_DOC_BASE_URL,
     "input_csv_path": config.input_csv_path,
     "output_csv_path": config.output_csv_path,
 }

@@ -7,6 +7,7 @@ import requests
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
 from pdf_storage import build_pdf_path, ensure_pdf_parent
+from source_link import normalize_source_link
 
 
 def _download_content(
@@ -15,10 +16,11 @@ def _download_content(
     timeout_seconds: int,
     retries: int,
 ) -> bytes:
+    normalized_link = normalize_source_link(link)
     last_error: Optional[Exception] = None
     for _ in range(retries + 1):
         try:
-            response = session.get(link, timeout=timeout_seconds)
+            response = session.get(normalized_link, timeout=timeout_seconds)
             if response.status_code == 200:
                 return response.content
             last_error = Exception(f"status code {response.status_code}")

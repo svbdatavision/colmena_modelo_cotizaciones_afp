@@ -204,6 +204,7 @@ Se incluye `/.gitlab-ci.yml` con:
 - `AFP_STORAGE_BASE_PATH`
 - `AFP_SOURCE_TABLE`
 - `AFP_TARGET_TABLE`
+- `AFP_SOURCE_BASE_URL` (default: `http://10.0.15.58:8080/notifEnvioMailRest/public/documento`)
 - `AFP_CHROMEDRIVER_PATH`
 - `AFP_TABLE_PROVIDER` (`delta` en Databricks, `parquet` para local)
 - `AFP_USE_PARTITIONED_PDF_STORAGE` (`true` por defecto)
