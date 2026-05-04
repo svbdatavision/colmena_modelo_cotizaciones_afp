@@ -2,6 +2,8 @@ from urllib.parse import urlparse
 
 
 DOC_SOURCE_BASE_URL = "http://10.0.15.58:8080/notifEnvioMailRest/public/documento"
+# Backward-compatible constant name used by notebook imports.
+SOURCE_DOC_BASE_URL = DOC_SOURCE_BASE_URL
 DOC_SOURCE_ENV_KEY = "AFP_DOC_SOURCE_BASE_URL"
 
 
@@ -22,4 +24,9 @@ def normalize_doc_link(original_link: str, base_url: str = DOC_SOURCE_BASE_URL) 
 
 
 def normalize_source_link(original_link: str, base_url: str = DOC_SOURCE_BASE_URL) -> str:
+    return normalize_doc_link(original_link=original_link, base_url=base_url)
+
+
+# Backward-compatible function name used by extract.py imports.
+def rewrite_source_link(original_link: str, base_url: str = DOC_SOURCE_BASE_URL) -> str:
     return normalize_doc_link(original_link=original_link, base_url=base_url)
