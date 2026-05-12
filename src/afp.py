@@ -170,6 +170,14 @@ def _wait_for_downloaded_pdf(download_temp: str, previous_files: set[str], timeo
     return ""
 
 
+def _capital_field(driver, suffix: str):
+    return driver.find_element(By.CSS_SELECTOR, f"input[id$='{suffix}']")
+
+
+def _capital_button(driver, suffix: str):
+    return driver.find_element(By.CSS_SELECTOR, f"input[id$='{suffix}'],button[id$='{suffix}']")
+
+
 config = dict(
     modelo=dict(url="https://nueva.afpmodelo.cl/empleadores/herramientas-empleadores/validar-certificados"),
     cuprum=dict(
@@ -500,30 +508,39 @@ def download_pdf(
         if driver is None:
             raise Exception("driver not initialized")
         driver.get(config[afp].get("url", ""))
-        driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_txtCertificado1").send_keys(
-            re.match("([A-Z0-9]{5})-", codver)[1]
-        )
-        driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_txtCertificado2").send_keys(
-            re.match("([A-Z0-9]{5}-){1}([A-Z0-9]{5})", codver)[2]
-        )
-        driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_txtCertificado3").send_keys(
-            re.match("([A-Z0-9]{5}-){2}([A-Z0-9]{5})", codver)[2]
-        )
-        driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_txtCertificado4").send_keys(
-            re.match("([A-Z0-9]{5}-){3}([A-Z0-9]{5})", codver)[2]
-        )
-        driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_txtDigito").send_keys(
-            re.match("([A-Z0-9]{5}-){4}([0-9]{1})", codver)[2]
-        )
-        btn = driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_btnValida")
+        parts = [segment.strip().upper() for segment in (codver or "").split("-") if segment.strip()]
+        if len(parts) != 5:
+            raise Exception("Capital codver format invalid")
+        if not all(re.fullmatch(r"[A-Z0-9]{5}", segment) for segment in parts[:4]):
+            raise Exception("Capital codver prefix format invalid")
+        if not re.fullmatch(r"[A-Z0-9]{1}", parts[4]):
+            raise Exception("Capital codver check digit format invalid")
+
+        _capital_field(driver, "_txtCertificado1").send_keys(parts[0])
+        _capital_field(driver, "_txtCertificado2").send_keys(parts[1])
+        _capital_field(driver, "_txtCertificado3").send_keys(parts[2])
+        _capital_field(driver, "_txtCertificado4").send_keys(parts[3])
+        _capital_field(driver, "_txtDigito").send_keys(parts[4])
+
+        previous_files = set(glob.glob(f"{download_temp}/*"))
+        btn = _capital_button(driver, "_btnValida")
         driver.execute_script("arguments[0].click();", btn)
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_btnDescargaPdf"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[id$='_btnDescargaPdf'],button[id$='_btnDescargaPdf']"))
         )
-        btn = driver.find_element(By.ID, "ctl00_ctl57_g_5e11d149_fe88_43a9_ba53_891df882a3f3_btnDescargaPdf")
+        btn = _capital_button(driver, "_btnDescargaPdf")
         driver.execute_script("arguments[0].click();", btn)
+        downloaded = _wait_for_downloaded_pdf(
+            download_temp=download_temp,
+            previous_files=previous_files,
+            timeout_seconds=min(15, timeout_seconds),
+        )
+        if downloaded:
+            os.rename(downloaded, output_pdf_path)
+            return
         time.sleep(3)
-        os.rename(max(glob.glob(f"{download_temp}/*"), key=os.path.getctime), output_pdf_path)
+        latest = max(glob.glob(f"{download_temp}/*"), key=os.path.getctime)
+        os.rename(latest, output_pdf_path)
         return
 
     if afp == "planvital":

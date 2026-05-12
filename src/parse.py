@@ -49,7 +49,7 @@ config = {
     },
     "capital": {
         "nombre": "AFP CAPITAL S.A.",
-        "codver": "certificacion:\\s+([a-z|\\d|-]+)",
+        "codver": "certificacion\\s*:\\s*([a-z\\d-]+)",
         "metadata": {
             "Creator": "PDFsharp",
             "Producer": "PDFsharp",
@@ -67,7 +67,7 @@ config = {
     },
     "planvital": {
         "nombre": "AFP PlanVital S.A.",
-        "codver": "Folio\\s+([\\d-]+)",
+        "codver": "Folio\\s+(?:N.?\\s*)?([a-z\\d-]+)",
         "metadata": {
             "Creator": "Telerik Reporting",
             "Producer": "Telerik Reporting",
@@ -84,6 +84,37 @@ config = {
         "download": "https://www.uno.cl/api/afiliado-certificado/validar",
     },
 }
+
+
+def _extract_codver(afp: str, txt: str) -> str:
+    base_pattern = config.get(afp, {}).get("codver")
+    patterns = [base_pattern] if base_pattern else []
+
+    if afp == "planvital":
+        patterns.extend(
+            [
+                r"folio\\s*(?:n[.o\\u00ba\\u00b0]*\\s*)?[:\\-]?\\s*([a-z\\d-]{6,})",
+                r"codigo\\s*(?:de\\s*)?(?:validacion|verificacion)\\s*[:\\-]?\\s*([a-z\\d-]{6,})",
+                r"certificado\\s*(?:n[.o\\u00ba\\u00b0]*\\s*)?[:\\-]?\\s*([a-z\\d-]{6,})",
+            ]
+        )
+    elif afp == "capital":
+        patterns.extend(
+            [
+                r"certificacion\\s*[:\\-]?\\s*([a-z\\d-]{8,})",
+                r"codigo\\s*(?:de\\s*)?(?:validacion|verificacion)\\s*[:\\-]?\\s*([a-z\\d-]{8,})",
+            ]
+        )
+    elif afp == "cuprum":
+        patterns.extend([r"folio\\s*n.?\\s*cu\\s*(\\d+)", r"folio\\s*n.?\\s*(\\d+)"])
+
+    for pattern in patterns:
+        if not pattern:
+            continue
+        match = re.search(pattern, txt, re.IGNORECASE)
+        if match:
+            return match[1].strip()
+    return ""
 
 
 HEADERS = [
@@ -171,7 +202,9 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
                 pass
 
             try:
-                out["codver"] = re.search(config[out["afp"]]["codver"], txt, re.IGNORECASE)[1]
+                codver = _extract_codver(out.get("afp", ""), txt)
+                if codver:
+                    out["codver"] = codver
             except Exception:
                 pass
 
