@@ -5,6 +5,7 @@ import os
 import re
 import time
 from typing import Optional
+from urllib.parse import urljoin
 
 import requests
 from pypasser import reCaptchaV3
@@ -18,6 +19,14 @@ from selenium.webdriver.support.wait import WebDriverWait
 from logging_utils import get_logger, log_exception
 from pipeline_config import PipelineConfig
 from pdf_storage import build_pdf_path, ensure_pdf_parent
+
+
+MODELO_API_URL = os.getenv(
+    "AFP_MODELO_API_URL",
+    "https://api-kong.afpmodelo.net/mwd/wsAFPHerramientas/wmValidarCertificados",
+)
+MODELO_API_KEY = os.getenv("AFP_MODELO_API_KEY", "OaRrn6BPCURmbyo20HeKKR4qXqsHC42p")
+CUPRUM_VALIDAR_REGEX = re.compile(r"Validar\.aspx\?ID=[^'\"&\s]+", re.IGNORECASE)
 
 
 def create_driver(driver_path: str, download_path: str, headless: bool = True):
@@ -42,8 +51,11 @@ def create_driver(driver_path: str, download_path: str, headless: bool = True):
             "download.directory_upgrade": True,
         },
     )
-    service = Service(driver_path)
-    driver = Chrome(service=service, options=options)
+    if driver_path and os.path.exists(driver_path):
+        service = Service(driver_path)
+        driver = Chrome(service=service, options=options)
+    else:
+        driver = Chrome(options=options)
     driver.set_page_load_timeout(30)
     return driver
 
@@ -64,6 +76,69 @@ def _request_with_retry(
             last_error = err
             time.sleep(1)
     raise last_error if last_error else Exception("request error")
+
+
+def _is_pdf_content(content_type: str, content: bytes) -> bool:
+    content_type = (content_type or "").lower()
+    return "application/pdf" in content_type or (content or b"").startswith(b"%PDF")
+
+
+def _write_pdf(output_pdf_path: str, content: bytes) -> None:
+    with open(output_pdf_path, "wb") as handler:
+        handler.write(content)
+
+
+def _clean_rut(rut: str) -> str:
+    return re.sub(r"[^0-9kK]", "", rut or "").upper()
+
+
+def _extract_modelo_payload(payload: dict) -> tuple[str, str]:
+    result = payload.get("wmValidarCertificadosResponse", {}).get("wmValidarCertificadosResult", {})
+    table = result.get("diffgram", {}).get("NewDataSet", {}).get("TABLA_VALIDAR_CERTIFICADOS")
+    if isinstance(table, list) and table:
+        table = table[0]
+    if not isinstance(table, dict):
+        return "", ""
+    return str(table.get("MESSAGE", "")), str(table.get("URL_DOCUMENTO", ""))
+
+
+def _find_visible_text_inputs(driver, min_count: int = 2, timeout_seconds: int = 15):
+    def _probe(_driver):
+        fields = []
+        for el in _driver.find_elements(By.CSS_SELECTOR, "input"):
+            if not el.is_displayed():
+                continue
+            input_type = (el.get_attribute("type") or "text").lower()
+            if input_type in {"text", "search", "tel", ""}:
+                fields.append(el)
+        return fields if len(fields) >= min_count else False
+
+    return WebDriverWait(driver, timeout_seconds).until(_probe)
+
+
+def _find_modelo_download_url(driver) -> str:
+    selectors = [
+        "a.download-btn",
+        "a[download]",
+        "a[href*='.pdf']",
+        "a[href*='certificado']",
+    ]
+    for selector in selectors:
+        for anchor in driver.find_elements(By.CSS_SELECTOR, selector):
+            href = anchor.get_attribute("href") or ""
+            if anchor.is_displayed() and href:
+                return href
+    return ""
+
+
+def _extract_cuprum_validation_url(driver) -> str:
+    current_url = driver.current_url or ""
+    if CUPRUM_VALIDAR_REGEX.search(current_url):
+        return current_url
+    match = CUPRUM_VALIDAR_REGEX.search(driver.page_source or "")
+    if not match:
+        return ""
+    return urljoin(config["cuprum"]["url"], match.group(0))
 
 
 config = dict(
@@ -173,21 +248,68 @@ def download_pdf(
     ensure_pdf_parent(output_pdf_path)
 
     if afp == "modelo":
+        cleaned_rut = _clean_rut(rut).rjust(15, "0")
+        modelo_error_message = ""
+        if cleaned_rut and codver:
+            req = _request_with_retry(
+                "POST",
+                MODELO_API_URL,
+                timeout_seconds=timeout_seconds,
+                retries=retries,
+                json={"idPersona": cleaned_rut, "FolioCertificado": codver},
+                headers={
+                    "accept": "*/*",
+                    "content-type": "application/json",
+                    "x-api-key": MODELO_API_KEY,
+                },
+            )
+            if req.status_code == 200:
+                message, url = _extract_modelo_payload(req.json())
+                modelo_error_message = message
+                if url:
+                    download_req = _request_with_retry(
+                        "GET",
+                        url,
+                        timeout_seconds=timeout_seconds,
+                        retries=retries,
+                    )
+                    if download_req.status_code == 200 and _is_pdf_content(
+                        download_req.headers.get("content-type", ""),
+                        download_req.content,
+                    ):
+                        _write_pdf(output_pdf_path, download_req.content)
+                        return
+                if message and "OPERACION EXITOSA" in message.upper():
+                    raise Exception("Modelo validation returned success without downloadable PDF")
+
         if driver is None:
-            raise Exception("driver not initialized")
+            raise Exception(f"modelo validation failed: {modelo_error_message or 'driver not initialized'}")
+
         driver.get(config[afp].get("url", ""))
-        driver.find_element(By.XPATH, '//*[@id="__layout"]/div/main/div/div/div/div[3]/div[1]/div[2]/input').send_keys(rut)
-        driver.find_element(By.XPATH, '//*[@id="__layout"]/div/main/div/div/div/div[3]/div[2]/div[2]/input').send_keys(codver)
-        btn = driver.find_element(By.XPATH, '//*[@id="B-000020"]')
-        driver.execute_script("arguments[0].click();", btn)
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="__layout"]/div/main/div/div/div/div[3]/div/div/a'))
-        )
-        url = driver.find_element(By.XPATH, '//*[@id="__layout"]/div/main/div/div/div/div[3]/div/div/a').get_attribute("href")
+        inputs = _find_visible_text_inputs(driver, min_count=2, timeout_seconds=15)
+        inputs[0].clear()
+        inputs[0].send_keys(rut)
+        inputs[1].clear()
+        inputs[1].send_keys(codver)
+        candidates = [
+            btn
+            for btn in driver.find_elements(By.CSS_SELECTOR, "button, a.ant-btn")
+            if btn.is_displayed()
+        ]
+        target_btn = None
+        for btn in candidates:
+            text = (btn.text or "").strip().lower()
+            btn_id = (btn.get_attribute("id") or "").strip()
+            if "validar certificado" in text or btn_id.startswith("B-"):
+                target_btn = btn
+                break
+        if target_btn is None:
+            raise Exception("Modelo validation button not found")
+        driver.execute_script("arguments[0].click();", target_btn)
+        url = WebDriverWait(driver, 15).until(lambda d: _find_modelo_download_url(d) or False)
         req = _request_with_retry("GET", url, timeout_seconds=timeout_seconds, retries=retries)
-        if req.status_code == 200:
-            with open(output_pdf_path, "wb") as handler:
-                handler.write(req.content)
+        if req.status_code == 200 and _is_pdf_content(req.headers.get("content-type", ""), req.content):
+            _write_pdf(output_pdf_path, req.content)
             return
         raise Exception("No result")
 
@@ -196,16 +318,28 @@ def download_pdf(
             raise Exception("driver not initialized")
         driver.get(config[afp].get("url", ""))
         driver.find_element(By.ID, "txtRUT").send_keys(rut)
-        driver.find_element(By.ID, "intFolio").send_keys(re.sub("CU", "", codver))
+        driver.find_element(By.ID, "intFolio").send_keys(re.sub(r"^CU", "", codver or "", flags=re.IGNORECASE))
         driver.find_element(By.ID, "btnaceptar").click()
+        WebDriverWait(driver, 10).until(
+            lambda d: (
+                "Validar.aspx?ID=" in (d.current_url or "")
+                or "No Se han encontrado datos para rut" in (d.page_source or "")
+                or "No Se han encontrado datos para folio" in (d.page_source or "")
+            )
+        )
         cookies = driver.get_cookies()
         sess = requests.Session()
         for cookie in cookies:
             sess.cookies.set(cookie["name"], cookie["value"])
-        req = sess.get(config[afp].get("url_dwn", ""), timeout=timeout_seconds)
-        if req.status_code == 200:
-            with open(output_pdf_path, "wb") as handler:
-                handler.write(req.content)
+        target_url = _extract_cuprum_validation_url(driver) or config[afp].get("url_dwn", "")
+        if target_url.endswith("?ID="):
+            page_source = driver.page_source or ""
+            if "No Se han encontrado datos" in page_source:
+                raise Exception("Cuprum certificate not found for provided rut/folio")
+            raise Exception("Cuprum validation URL ID not found")
+        req = sess.get(target_url, timeout=timeout_seconds)
+        if req.status_code == 200 and _is_pdf_content(req.headers.get("content-type", ""), req.content):
+            _write_pdf(output_pdf_path, req.content)
             try:
                 os.remove(max(glob.glob(f"{download_temp}/*"), key=os.path.getctime))
             except Exception:
@@ -365,7 +499,7 @@ def run(config_runtime: Optional[PipelineConfig] = None) -> str:
                 out = row
                 if row["es_cert_cot"] == "True" and row["afp"] and row["rut"] and row["codver"]:
                     try:
-                        if row["afp"] in {"modelo", "cuprum", "capital"} and driver is None:
+                        if row["afp"] in {"cuprum", "capital"} and driver is None:
                             driver = create_driver(
                                 driver_path=config_runtime.chromedriver_path,
                                 download_path=config_runtime.temp_dir,
