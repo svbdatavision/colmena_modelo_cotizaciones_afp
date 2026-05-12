@@ -32,17 +32,19 @@ CUPRUM_VALIDAR_REGEX = re.compile(r"Validar\.aspx\?ID=[^'\"&\s]+", re.IGNORECASE
 def create_driver(driver_path: str, download_path: str, headless: bool = True):
     options = Options()
     options.add_argument("--verbose")
-    options.add_argument("enable-automation")
     options.add_argument("--no-sandbox")
     if headless:
         options.add_argument("--headless")
     options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--dns-prefetch-disable")
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-gpu")
     options.add_argument("window-size=1200x800")
     options.add_argument("log-level=3")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
     options.add_experimental_option(
         "prefs",
         {
@@ -56,6 +58,15 @@ def create_driver(driver_path: str, download_path: str, headless: bool = True):
         driver = Chrome(service=service, options=options)
     else:
         driver = Chrome(options=options)
+    try:
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});",
+            },
+        )
+    except Exception:
+        pass
     driver.set_page_load_timeout(30)
     return driver
 
@@ -139,6 +150,24 @@ def _extract_cuprum_validation_url(driver) -> str:
     if not match:
         return ""
     return urljoin(config["cuprum"]["url"], match.group(0))
+
+
+def _wait_for_downloaded_pdf(download_temp: str, previous_files: set[str], timeout_seconds: int = 12) -> str:
+    end_time = time.time() + timeout_seconds
+    while time.time() < end_time:
+        current_files = set(glob.glob(f"{download_temp}/*"))
+        new_files = [path for path in current_files if path not in previous_files]
+        for path in sorted(new_files, key=os.path.getctime, reverse=True):
+            if path.endswith(".crdownload"):
+                continue
+            try:
+                with open(path, "rb") as handler:
+                    if handler.read(5).startswith(b"%PDF"):
+                        return path
+            except Exception:
+                continue
+        time.sleep(0.4)
+    return ""
 
 
 config = dict(
@@ -317,34 +346,94 @@ def download_pdf(
         if driver is None:
             raise Exception("driver not initialized")
         driver.get(config[afp].get("url", ""))
-        driver.find_element(By.ID, "txtRUT").send_keys(rut)
-        driver.find_element(By.ID, "intFolio").send_keys(re.sub(r"^CU", "", codver or "", flags=re.IGNORECASE))
-        driver.find_element(By.ID, "btnaceptar").click()
-        WebDriverWait(driver, 10).until(
-            lambda d: (
-                "Validar.aspx?ID=" in (d.current_url or "")
-                or "No Se han encontrado datos para rut" in (d.page_source or "")
-                or "No Se han encontrado datos para folio" in (d.page_source or "")
-            )
+        folio_clean = re.sub(r"^CU", "", codver or "", flags=re.IGNORECASE)
+        rut_input = driver.find_element(By.ID, "txtRUT")
+        folio_input = driver.find_element(By.ID, "intFolio")
+        rut_input.clear()
+        folio_input.clear()
+        rut_input.send_keys(rut)
+        folio_input.send_keys(folio_clean)
+
+        previous_files = set(glob.glob(f"{download_temp}/*"))
+        driver.execute_script(
+            """
+            if (typeof ValidacionForm === 'function') {
+                ValidacionForm();
+            } else {
+                var btn = document.getElementById('btnaceptar');
+                if (btn) { btn.click(); }
+            }
+            """
         )
+
+        download_candidate = _wait_for_downloaded_pdf(
+            download_temp=download_temp,
+            previous_files=previous_files,
+            timeout_seconds=min(15, timeout_seconds),
+        )
+        if download_candidate:
+            os.rename(download_candidate, output_pdf_path)
+            return
+
+        not_found_markers = [
+            "No Se han encontrado datos para rut",
+            "No Se han encontrado datos para folio",
+            "Ingrese su RUT",
+            "Ingrese Nro. Folio",
+        ]
+        page_source = driver.page_source or ""
+        if any(marker in page_source for marker in not_found_markers):
+            raise Exception("Cuprum certificate not found for provided rut/folio")
+
         cookies = driver.get_cookies()
         sess = requests.Session()
         for cookie in cookies:
-            sess.cookies.set(cookie["name"], cookie["value"])
+            sess.cookies.set(
+                cookie["name"],
+                cookie["value"],
+                domain=cookie.get("domain"),
+                path=cookie.get("path"),
+            )
+        try:
+            user_agent = driver.execute_script("return navigator.userAgent;")
+        except Exception:
+            user_agent = "Mozilla/5.0"
+
         target_url = _extract_cuprum_validation_url(driver) or config[afp].get("url_dwn", "")
-        if target_url.endswith("?ID="):
-            page_source = driver.page_source or ""
-            if "No Se han encontrado datos" in page_source:
-                raise Exception("Cuprum certificate not found for provided rut/folio")
-            raise Exception("Cuprum validation URL ID not found")
-        req = sess.get(target_url, timeout=timeout_seconds)
-        if req.status_code == 200 and _is_pdf_content(req.headers.get("content-type", ""), req.content):
-            _write_pdf(output_pdf_path, req.content)
-            try:
-                os.remove(max(glob.glob(f"{download_temp}/*"), key=os.path.getctime))
-            except Exception:
-                pass
+        candidates = []
+        if target_url:
+            candidates.append(target_url)
+        if config[afp].get("url_dwn", "") and folio_clean:
+            candidates.append(config[afp].get("url_dwn", "") + folio_clean)
+            candidates.append(config[afp].get("url_dwn", "") + "CU" + folio_clean)
+
+        seen = set()
+        for candidate_url in candidates:
+            if not candidate_url or candidate_url in seen:
+                continue
+            seen.add(candidate_url)
+            req = sess.get(
+                candidate_url,
+                timeout=timeout_seconds,
+                allow_redirects=True,
+                headers={
+                    "User-Agent": user_agent,
+                    "Referer": config[afp].get("url", ""),
+                },
+            )
+            if req.status_code == 200 and _is_pdf_content(req.headers.get("content-type", ""), req.content):
+                _write_pdf(output_pdf_path, req.content)
+                return
+
+        download_candidate = _wait_for_downloaded_pdf(
+            download_temp=download_temp,
+            previous_files=previous_files,
+            timeout_seconds=min(8, timeout_seconds),
+        )
+        if download_candidate:
+            os.rename(download_candidate, output_pdf_path)
             return
+
         raise Exception("No result")
 
     if afp == "habitat":
